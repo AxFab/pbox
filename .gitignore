@@ -1,0 +1,21 @@
+# Java Project, git ignore files
+
+# Use strict rules: 
+# We deny all but accept some files!
+*
+
+# Authorize directories, but re-ignore some
+!*/
+bin/
+obj/
+
+# Add Project configuration
+
+
+# Add repository config files
+!.gitignore
+!README
+!LICENSE
+
+# Add sources files
+!*.java
