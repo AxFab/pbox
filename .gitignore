@@ -10,7 +10,7 @@ bin/
 obj/
 
 # Add Project configuration
-
+!Makefile
 
 # Add repository config files
 !.gitignore
@@ -19,3 +19,4 @@ obj/
 
 # Add sources files
 !*.java
+!*.mf
