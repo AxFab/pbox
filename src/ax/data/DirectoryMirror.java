@@ -15,7 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-package ax.net;
+package ax.data;
 
 import ax.util.ProgOptions;
 import java.nio.file.*;
@@ -44,6 +44,11 @@ public class DirectoryMirror
 
     // TODO What about non checked ! (meaning they have been deleted from local)
 
+  }
+
+  public String getNamespace()
+  {
+    return "";
   }
 
   public Path getTopDir() 
@@ -109,7 +114,7 @@ public class DirectoryMirror
     po.addOption ('n', "no-version", null, "Try to clean previous version to spare space");
     po.addUsage ("[options] [end-point]...");
 
-    System.out.println ("  pbox  Copyright (C) 2014  AxFab.net");
+    System.out.println ("  pbox - Copyright (C) 2014  AxFab.net");
     System.out.println ("  This program comes with ABSOLUTELY NO WARRANTY.");
     System.out.println ("  This is free software, and you are welcome to redistribute it");
     System.out.println ("  under certain conditions. For more information visit axfab.net.");

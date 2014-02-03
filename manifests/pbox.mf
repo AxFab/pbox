@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Created-By: 1.0.0 (AxFab)
+Name: pbox
+Main-Class: ax.data.DirectoryMirror
+Implementation-Title: pbox
+Implementation-Version: build1
+Implementation-Vendor: AxFab
+Sealed: true

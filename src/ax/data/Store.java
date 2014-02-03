@@ -24,26 +24,13 @@ import java.io.*;
 
 public class Store 
 {
-  public static void get (String namespace, String object)
-      throws IOException
-  {
-    throw new IOException ("No way...");
-  }
 
-  public static void async (String namespace, String object, ILoadable bucket)
+  public static void updated (Path path, String hash, String pHash, long version, String type) 
   {
-    bucket.laodFinish (false, "Unable to load using this method");
-  }
-
-  public static void peer (String namespace, String object, ILoadable bucket)
-  {
-    bucket.laodFinish (false, "Unable to load using this method");
-  }
-
-
-  public static void updated (Path path, String parent, String hash, String type) 
-  {
+    /*
     System.out.format("[update] %s -> %s\n", hash, path);
+    webService.sendUpdate (path, hash, pHash, version, type);
+    */
   }
 }
 
