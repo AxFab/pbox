@@ -179,26 +179,29 @@ public class FileEntry implements ILoadable
     return true; 
   }
 
-  public void extern (String hash, String parent, long version) 
+  public boolean extern (String hash, String parent, long version) 
   {
     if (this.status != BlobStatus.Saved) {
       System.err.format ("[Warn.] Wrong workflow <extern> %s, %s\n", this.status, this.path);
-      return; 
+      return false; 
     }
 
     System.out.format ("[Debug] follow workflow <extern, %s>\n", path);
 
-    if (this.hash == hash && this.parent == parent && this.version == version) {
-
+    if (this.hash.equals(hash) /* && this.parent.equals(parent) && this.version == version*/) {
       System.err.format ("[Trace] I'm up to date for %s\n", this.path);
-      return;
-    } else if (this.hash != parent) {
-      System.err.format ("[Warn.] This is a collision\n");
-      return;  
+      return false;
+
+    } else if (!this.hash.equals(parent)) {
+      System.err.format ("[Warn.] This is a collision, %s\n", this.path);
+      System.out.format ("LOCAL:  %s (%d) [%s / %s]\n", this.path, this.version, this.hash, this.parent );
+      System.out.format ("EXTERN: %s (%d) [%s / %s]\n", this.path, version, hash, parent );
+      return false;
     }
 
     this.hash = hash;
     this.status = BlobStatus.UpdateExtern;
+    return true;  
   }
 
   private void commitSave (String hash, File fTmp) 
@@ -219,8 +222,12 @@ public class FileEntry implements ILoadable
       }
     }
 
-    if (!fTmp.renameTo(dest)) {
-      throw new IOException("Impossible to rename temporary file");
+    if (!dest.exists()) {
+      if (!fTmp.renameTo(dest)) {
+        throw new IOException("Impossible to rename temporary file");
+      }
+    } else {
+      fTmp.delete();
     }
   }
 
@@ -325,7 +332,6 @@ public class FileEntry implements ILoadable
       } else if (this.type == BlobType.File || this.type == BlobType.Exe) {
         out.getParentFile().mkdirs();
 
-        System.out.format ("[Debug] E, [%s, %s]\n", this.topDir, this.hash);
         File in = this.buildRecord();
         BeamIn bIn = new BeamIn(in);
 
@@ -454,7 +460,7 @@ public class FileEntry implements ILoadable
   @Override
   public String toString () 
   {
-    return "<" this.status + "> " + this.path.toString() + " (" + this.version + ") [" + this.hash;
+    return "<" + this.status + "> " + this.path.toString() + " (" + this.version + ") [" + this.hash;
   }
 }
 

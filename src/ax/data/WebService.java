@@ -134,7 +134,8 @@ public class WebService implements Runnable
         fpEn = new FileEntry(path, hash, pHash, version, type, this.topDir);
         this.dirMirror.dataService.addFileEntry (fpEn, path);
       } else {
-        fpEn.extern (hash, pHash, version);
+        this.dirMirror.dataService.updateExFileEntry (fpEn, hash, pHash, version);
+        // fpEn.extern (hash, pHash, version);
       }
     }
 
@@ -186,7 +187,6 @@ public class WebService implements Runnable
   public void receiveRequest (BeamSocket beam)
       throws BeamFormatException, IOException
   {
-    System.out.format ("[Trace] Receive socket \n");
     String label = beam.in.readLabel ();
 
     System.out.format ("[Trace] Receive request %s\n", label);

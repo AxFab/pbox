@@ -56,6 +56,18 @@ public class DataService implements Runnable
     file.unlock();
   }
 
+  public void updateExFileEntry (FileEntry file, String hash, String parent, long version)
+  {
+    file.lock (); // Prevent watcher to mess with it
+
+    if (file.extern (hash, parent, version)) {
+      synchronized (needUpdate) {
+        needUpdate.add (file);
+      }
+    }
+    file.unlock();
+  }
+
   public void rmLocalFileEntry (FileEntry file, Path path)
   {
     file.localdelete (this.dirMirror.webService);
