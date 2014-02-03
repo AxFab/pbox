@@ -24,21 +24,60 @@ import java.util.*;
 public class DataService implements Runnable
 {
   private DirectoryMirror dirMirror;
+  private Path topDir;
 
   private Hashtable<Path, FileEntry> entries;
   private HashSet<FileEntry> needUpdate;
 
   public DataService (DirectoryMirror dm)
   {
+    this.dirMirror = dm;
+    this.topDir = dm.getTopDir();
     this.entries = new Hashtable<Path, FileEntry> ();
     this.needUpdate = new HashSet<FileEntry> ();
   }
-
 
   public FileEntry getFileEntry (Path path)
   {
     synchronized (entries) {
       return entries.get (path);  
+    }
+  }
+
+  public void updateFileEntry (FileEntry file, Path path)
+  {
+    file.lock (); // Prevent watcher to mess with it
+
+    if (file.invalidate ()) {
+      synchronized (needUpdate) {
+        needUpdate.add (file);
+      }
+    }
+    file.unlock();
+  }
+
+  public void rmLocalFileEntry (FileEntry file, Path path)
+  {
+    file.localdelete (this.dirMirror.webService);
+    rmFileEntry (file, path);
+  }
+
+  public void rmFileEntry (FileEntry file, Path path)
+  {
+    file.lock (); // Prevent watcher to mess with it
+
+    if (file.delete ()) {
+      synchronized (needUpdate) {
+        needUpdate.add (file);
+      }
+    }
+    file.unlock();
+  }
+
+  public void remove (FileEntry file, Path path)
+  {
+    synchronized (entries) {
+      entries.remove (path);  
     }
   }
 
@@ -78,7 +117,7 @@ public class DataService implements Runnable
       }
 
       if (fp != null) {
-        if (fp.doSomething (timer, "")) {
+        if (fp.doSomething (timer, this.dirMirror)) {
           synchronized (needUpdate) {
             needUpdate.remove (fp);
           }
@@ -89,6 +128,13 @@ public class DataService implements Runnable
       if (fp == null || --max <= 0) {
         try {
           Thread.sleep (3500);
+          System.out.format ("[Debug] DataService, List %d\n", needUpdate.size());
+
+          synchronized (needUpdate) {
+            for (FileEntry e : needUpdate) {
+              System.out.format ("  DS:: %s\n", e);
+            }
+          }
         } catch (InterruptedException ex) {
         }
         max = 300;
@@ -100,6 +146,7 @@ public class DataService implements Runnable
 
   public void run () 
   {
+    Thread.currentThread().setName ("DataService["+this.topDir.toString()+"]");
     System.out.println ("[Trace] DataService started");
     this.processFiles();
     System.out.println ("[Trace] DataService stopped");

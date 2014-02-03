@@ -19,6 +19,7 @@ package ax.io;
 
 public class BeamFormatException extends Exception
 {
-
+    public BeamFormatException () {}
+    public BeamFormatException (String message) {}
 }
 

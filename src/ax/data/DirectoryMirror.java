@@ -46,6 +46,11 @@ public class DirectoryMirror
 
   }
 
+  public String getNamespace()
+  {
+    return "";
+  }
+
   public Path getTopDir() 
   {
     return this.path;
@@ -109,7 +114,7 @@ public class DirectoryMirror
     po.addOption ('n', "no-version", null, "Try to clean previous version to spare space");
     po.addUsage ("[options] [end-point]...");
 
-    System.out.println ("  pbox  Copyright (C) 2014  AxFab.net");
+    System.out.println ("  pbox - Copyright (C) 2014  AxFab.net");
     System.out.println ("  This program comes with ABSOLUTELY NO WARRANTY.");
     System.out.println ("  This is free software, and you are welcome to redistribute it");
     System.out.println ("  under certain conditions. For more information visit axfab.net.");

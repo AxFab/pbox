@@ -33,7 +33,7 @@ enum BlobType {
 }
 
 enum BlobStatus {
-  Unknown, Saved, UpdateLocal, UpdateExtern, InStore, Faulted, Loading
+  Unknown, Saved, UpdateLocal, UpdateExtern, InStore, Faulted, Loading, Deleted
 }
 
 public class FileEntry implements ILoadable
@@ -54,15 +54,17 @@ public class FileEntry implements ILoadable
   Date lastUpdate;
   boolean updated;
   AtomicInteger locked;
+  Thread lockT;
+  StackTraceElement[] lockS;
 
   public FileEntry (Path path, Path topDir) 
   {
     this.locked = new AtomicInteger(0);
     this.topDir = topDir;
-    this.version = 0;
-    File fp = new File (path.toString());
-    this.name = fp.getName();
     this.path = path;
+    this.version = 0;
+    File fp = buildFile ();
+    this.name = fp.getName();
     this.status = BlobStatus.UpdateLocal;
     this.lastUpdate = new Date();
     this.lastUpdate.setTime(Long.MAX_VALUE);
@@ -83,59 +85,115 @@ public class FileEntry implements ILoadable
   {
     this.locked = new AtomicInteger(0);
     this.topDir = topDir;
+    this.path = path;
     this.hash = hash;
     this.parent = pHash;
     this.version = version;
-    File fp = new File (path.toString());
+    File fp = buildFile ();
     this.name = fp.getName();
-    this.path = path;
     this.status = BlobStatus.UpdateExtern;
     this.type = BlobType.valueOf (type);
   }
 
+  /* === File access ======================================================= */
+
+  private File buildFile () 
+  {
+    return new File (this.topDir.toString() + "/" + this.path.toString());
+  }
+
+  public static File buildFileRecord (Path topDir, String hash) 
+  {
+    return new File (topDir.toString() + "/.pbox/obj/" + hash.substring(0,2) + "/" + hash.substring(2));
+  }
+
+  private File buildRecord () 
+  {
+    return FileEntry.buildFileRecord (this.topDir, this.hash);
+  }
+
+  /* === Locking mechanisms ================================================ */
+
   public boolean trylock () 
   {
-    return this.locked.getAndSet(1) == 0;
+    if (this.locked.getAndSet(1) == 0) 
+    {
+      /*
+      lockT = Thread.currentThread();
+      lockS = lockT.getStackTrace();
+      */
+      return true;
+    }
+    return false;
   }
 
   public boolean lock () 
   {
-    while (this.locked.getAndSet(1) != 0)
+    int m = 50;
+    while (this.locked.getAndSet(1) != 0) {
       Thread.yield();
+      if (--m < 0) {
+        m = 50;
+        /*
+        System.err.format ("[Err.] Try to get a FileEntry lock at: <%s>\n", 
+          Thread.currentThread().getName());
+        // new Throwable().printStackTrace();
+        Thread.currentThread().dumpStack();
+        System.err.format ("[----] Against: <%s>\n", lockT.getName());
+        // lockT.dumpStack();
+        for(StackTraceElement st : lockS){
+          System.err.println(st);
+        } */
+      }
+    }
     
+    /*
+    lockT = Thread.currentThread();
+    lockS = lockT.getStackTrace();
+    */
     return true;
   }
 
   public void unlock () 
   {
+    /*
+    lockT = null;
+    lockS = null; */
     this.locked.set (0);
   }
 
-  public void invalidate () 
+  /* === File Entry Actions ================================================ */
+
+  public boolean invalidate () 
   {
     if (this.status != BlobStatus.Saved && 
         this.status != BlobStatus.UpdateLocal) {
-      System.err.println ("[Warn.] Wrong workflow <invalidate>");
-      return; 
+      System.err.format ("[Warn.] Wrong workflow <invalidate> %s, %s\n", this.status, this.path);
+      return false; 
     }
 
-    System.out.println ("[Debug] follow workflow <invalidate>");
+    System.out.format ("[Debug] follow workflow <invalidate, %s>\n", path);
 
     this.status = BlobStatus.UpdateLocal;
     this.lastUpdate = new Date();
+    return true; 
   }
 
   public void extern (String hash, String parent, long version) 
   {
     if (this.status != BlobStatus.Saved) {
-      System.err.println ("[Warn.] Wrong workflow <extern>");
+      System.err.format ("[Warn.] Wrong workflow <extern> %s, %s\n", this.status, this.path);
       return; 
     }
 
-    System.out.println ("[Debug] follow workflow <extern>");
+    System.out.format ("[Debug] follow workflow <extern, %s>\n", path);
 
-    if (this.hash != parent) {
-      System.err.println ("[Warn.] This is a collision");
+    if (this.hash == hash && this.parent == parent && this.version == version) {
+
+      System.err.format ("[Trace] I'm up to date for %s\n", this.path);
+      return;
+    } else if (this.hash != parent) {
+      System.err.format ("[Warn.] This is a collision\n");
       return;  
     }
 
@@ -169,17 +227,17 @@ public class FileEntry implements ILoadable
   public void save () 
   {
     if (this.status != BlobStatus.UpdateLocal) {
-      System.err.println ("[Warn.] Wrong workflow <save>");
+      System.err.format ("[Warn.] Wrong workflow <save> %s, %s\n", this.status, this.path);
       return; 
     }
 
-    System.out.println ("[Debug] follow workflow <save>");
+    System.out.format ("[Debug] follow workflow <save, %s>\n", path);
 
     String hash;
     long lg;
 
     try {
-      File fp = new File (this.path.toString());
+      File fp = this.buildFile ();
       lg = fp.length();
 
       File fTmp = new File (topDir.toString() + "/.pbox/thread-id.tmp");
@@ -190,7 +248,7 @@ public class FileEntry implements ILoadable
       bOut.writeString ("parent", this.parent);
       bOut.writeInteger ("version", this.version + 1);
 
-      if (fp.isFile()) {
+      if (type == BlobType.File || type == BlobType.Exe) {
         bOut.writeFile ("content", fp);
       }
       bOut.writeCloseObject ();
@@ -208,35 +266,36 @@ public class FileEntry implements ILoadable
     this.hash = hash;
     this.lastUpdate = new Date();
     this.status = BlobStatus.Saved;
-
-    Store.updated (this.path, this.parent, this.hash, this.type.toString());
-    // System.out.format ("[Trace] new record %s for %s\n", this.hash, this.path);
   }
 
-  public void reload (String namespace) 
+  public void reload (String namespace, WebService ws) 
   {
     if (this.status != BlobStatus.UpdateExtern) {
-      System.err.println ("[Warn.] Wrong workflow <reload>");
+      System.err.format ("[Warn.] Wrong workflow <reload> %s, %s\n", this.status, this.path);
       return; 
     }
 
-    System.out.println ("[Debug] follow workflow <reload>");
+    System.out.format ("[Debug] follow workflow <reload, %s>\n", path);
 
     this.status = BlobStatus.Loading;
 
     if (this.length < 64L * 1024L) {
       try {
-        Store.get (namespace, this.hash);
+        if (ws.get (namespace, this.hash)) {
+          this.status = BlobStatus.InStore;
+        } else {
+          this.status = BlobStatus.UpdateExtern;
+          // System.out.format ("[Debug] need to retry <reload, %s>\n", path);
+        }
       } catch (IOException e) {
         this.status = BlobStatus.UpdateExtern;
         System.err.format ("[Error] %s\n", e.getMessage());
         return;
       }
-      this.status = BlobStatus.InStore;
     } else if (this.length < 128L * 1024L * 1024L) {
-      Store.async (namespace, this.hash, this);
+      ws.async (namespace, this.hash, this);
     } else {
-      Store.peer (namespace, this.hash, this);
+      ws.peer (namespace, this.hash, this);
     }
   }
 
@@ -253,20 +312,21 @@ public class FileEntry implements ILoadable
   public void extract () 
   {
     if (this.status != BlobStatus.InStore) {
-      System.err.println ("[Warn.] Wrong workflow <extract>");
+      System.err.format ("[Warn.] Wrong workflow <extract> %s, %s\n", this.status, this.path);
       return; 
     }
 
-    System.out.println ("[Debug] follow workflow <extract>");
+    System.out.format ("[Debug] follow workflow <extract, %s>\n", path);
 
     try {
-      File out = new File (this.topDir + "/" + this.path);
+      File out = this.buildFile();
       if (this.type == BlobType.Dir) {
         out.mkdirs();
       } else if (this.type == BlobType.File || this.type == BlobType.Exe) {
         out.getParentFile().mkdirs();
-        File in = new File (this.topDir + "/.pbox/obj/" + this.hash.substring(0,2) + "/" + 
-          this.hash.substring(2));
+
+        System.out.format ("[Debug] E, [%s, %s]\n", this.topDir, this.hash);
+        File in = this.buildRecord();
         BeamIn bIn = new BeamIn(in);
 
         String label = bIn.readLabel ();
@@ -275,27 +335,28 @@ public class FileEntry implements ILoadable
           switch (label) {
             case "name":
               label = bIn.readString ();
-              //System.out.format ("{} name %s\n", label);
               break;
             case "type":
               label = bIn.readString ();
-              // System.out.format ("{} type %s\n", kvs.readString ());
               break;
             case "parent":
               label = bIn.readString ();
-              //System.out.format ("{} parent %s\n", kvs.readString ());
               break;
             case "version":
-              bIn.readInteger ();
-              //System.out.format ("{} version %d\n", kvs.readInteger ());
+              long vers = bIn.readInteger ();
               break;
             case "content":
               System.err.format ("[Trace] Re-write file %s\n", out.getPath());
               bIn.readFile (out);
               break;
+            default:
+              System.err.format("[Debug] Unknown field %s\n", label);
+              bIn.readPass ();
+              break;
           }
         }
       }
+      System.err.format ("[Trace] Done extract file %s -> %s\n", this.hash, out.getPath());
     } catch (BeamFormatException e) {
       System.err.format ("[Error] Wrong format on Beam extraction %s\n", e.getMessage());
       return;
@@ -307,31 +368,80 @@ public class FileEntry implements ILoadable
     this.status = BlobStatus.Saved;
   }
 
+  public void localdelete (WebService ws) {
+    ws.sendDelete (this.path, this.hash, this.version);
+  }
+
+  public boolean delete ()
+  {
+    if (this.status != BlobStatus.Saved && 
+        this.status != BlobStatus.UpdateLocal) {
+      System.err.format ("[Warn.] Wrong workflow <delete> %s, %s\n", this.status, this.path);
+      return false; 
+    }
+
+    System.out.format ("[Debug] follow workflow <delete, %s>\n", path);
+
+    this.status = BlobStatus.Deleted;
+    this.lastUpdate = new Date();
+    return true; 
+  }
+
+  public boolean doDelete (WebService ws)  {
+
+    if (this.status != BlobStatus.Deleted) {
+      System.err.format ("[Warn.] Wrong workflow <doDelete> %s, %s\n", this.status, this.path);
+      return false; 
+    }
+
+    System.out.format ("[Debug] follow workflow <doDelete, %s>\n", path);
+
+    File fp = this.buildFile();
+    if (fp.exists ()) {
+      if (fp.delete()) {
+        ws.sendDelete (this.path, this.hash, this.version);
+      }
+      return false;
+    }
+
+    return true;
+  }
+
   public boolean somethingToDo (Date timer) 
   {
     return ((this.status == BlobStatus.UpdateLocal && 
         this.lastUpdate.compareTo (timer) > 0) || 
         this.status == BlobStatus.InStore ||
-        this.status == BlobStatus.UpdateExtern);
+        this.status == BlobStatus.UpdateExtern ||
+        this.status == BlobStatus.Deleted);
   }
 
-  public boolean doSomething (Date timer, String namespace) 
+  public boolean doSomething (Date timer, DirectoryMirror dm) 
   {
+    BlobStatus st = this.status;
     // System.out.format ("[Trace] Action: %s  [%s - %s]\n", this.status, this.lastUpdate, timer);
     if (this.status == BlobStatus.UpdateLocal && 
         this.lastUpdate.compareTo (timer) > 0) {
       this.save ();
+      // System.err.format ("[Debug] Update %s [%s]\n", this.path, this.hash);
+      dm.webService.sendUpdate (this.path, this.hash, this.parent, this.version, this.type.toString());
       return true;
     } else if (this.status == BlobStatus.InStore) {
       this.extract ();
       return true;
       // TODO Huge file may crash the apps here
     } else if (this.status == BlobStatus.UpdateExtern) {
-      this.reload (namespace);
+      this.reload (dm.getNamespace(), dm.webService);
+    } else if (this.status == BlobStatus.Deleted) {
+      if (this.doDelete (dm.webService)) {
+        dm.dataService.remove(this, this.path);
+        return true;
+      }
     } else  if (this.status != BlobStatus.Saved && this.status != BlobStatus.Loading) {
       System.out.format ("[Trace] something to do here\n");
     }
-
+    
+    System.out.format ("[Trace] Action %s -> %s\n", st, this.status);
     return false;
   }
 
@@ -339,6 +449,12 @@ public class FileEntry implements ILoadable
   {
     String subdir = this.topDir.toString() + "/.pbox/obj/" + this.hash.substring(0,2) + "/";    
     return Paths.get (subdir + this.hash.substring(2));
+  }
+
+  @Override
+  public String toString () 
+  {
+    return "<" this.status + "> " + this.path.toString() + " (" + this.version + ") [" + this.hash;
   }
 }
 

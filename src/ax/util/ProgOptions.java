@@ -113,27 +113,23 @@ public class ProgOptions
 
   public Options getShortOpt (char shortOpt)
   {
-    synchronized (options) {
-      for (Options opt : options) {
-        if (opt.shortOpt == shortOpt) {
-          return opt;
-        }
+    for (Options opt : options) {
+      if (opt.shortOpt == shortOpt) {
+        return opt;
       }
     }
-
+ 
     return null;
   }
 
   public Options getLongOpt (String longOpt)
   {
-    synchronized (options) {
-      for (Options opt : options) {
-        if (opt.longOpt.equals(longOpt)) {
-          return opt;
-        }
+    for (Options opt : options) {
+      if (opt.longOpt.equals(longOpt)) {
+        return opt;
       }
     }
-
+ 
     return null;
   }
 

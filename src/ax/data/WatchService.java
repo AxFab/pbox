@@ -193,24 +193,7 @@ public class WatchService implements Runnable
 
   public void modify (Path path) 
   {
-    System.out.format ("MODIFY %s\n", path);
-    /*
-    FileEntry entry = entries.get (path);
-    if (entry == null) {
-      // LOG error
-      File fp = new File (this.topDir, path.toString());
-      entry = new FileEntry (path, fp);
-      entries.put (path, entry);
-    }
-
-    if (entry.isFile ()) {
-      pushToSave (entry);
-    }
-    */
-  }
-
-  public void create (Path path) 
-  {
+    // System.out.format ("MODIFY %s\n", path);
     path = Paths.get (path.toString().replace(this.topDir.toString(), "."));
     // System.out.format ("[Debug] Named choose is: %s\n", path);
     FileEntry fpEn = this.dirMirror.dataService.getFileEntry (path);
@@ -220,17 +203,29 @@ public class WatchService implements Runnable
       this.dirMirror.dataService.addFileEntry (fpEn, path);
 
     } else {
-      System.out.format("[Debug] create but already exist ! -> %s\n", path);
+      this.dirMirror.dataService.updateFileEntry (fpEn, path);
+      // System.out.format("[Debug] create but already exist ! -> %s\n", path);
     }
+  }
+
+  public void create (Path path) 
+  {
+    // Act like a modification ()
+    modify (path);
   }
 
   public void delete (Path path) 
   {
-
+    path = Paths.get (path.toString().replace(this.topDir.toString(), "."));
+    FileEntry fpEn = this.dirMirror.dataService.getFileEntry (path);
+    if (fpEn != null) {
+      this.dirMirror.dataService.rmLocalFileEntry (fpEn, path);
+    }
   }
 
   public void run () 
   {
+    Thread.currentThread().setName ("WatchService["+this.topDir.toString()+"]");
     System.out.println ("[Trace] WatchService started");
     this.processEvents();
     System.out.println ("[Trace] WatchService stopped");

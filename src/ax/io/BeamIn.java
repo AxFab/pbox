@@ -189,11 +189,14 @@ public class BeamIn
       }
       
       if (len <=0 ) {
+        out.close ();
         throw new BeamFormatException();
       }
       rest -= len;
       out.write(buffer, 0, len);
     }
+
+    out.close ();
   }
 
   public void readPass () 
